@@ -22,6 +22,9 @@
 #include "fs/ext2.h"
 #include "drivers/ahci.h"
 #include "drivers/acpi.h"
+
+#include "drivers/hda.h"
+
 #include "lib/string.h"
 
 
@@ -1879,6 +1882,88 @@ void kmain(void) {
 
     // Enable interrupts
     asm volatile ("sti");
+
+    bool hda_ok = hda_init();
+    if (hda_ok && hda_is_present()) {
+        uint16_t gcap = hda_get_gcap();
+        uint8_t vmaj = hda_get_version_major();
+        uint8_t vmin = hda_get_version_minor();
+
+        print(fb0(), "HDA: controller detected, GCAP=0x");
+        hx4(fb0(), gcap);
+        print(fb0(), ", version ");
+        print_u32(fb0(), vmaj);
+        print(fb0(), ".");
+        print_u32(fb0(), vmin);
+        print(fb0(), "\n");
+
+        if (hda_controller_was_reset()) {
+            print(fb0(), "HDA: controller reset OK\n");
+        } else {
+            print(fb0(), "HDA: controller reset FAILED\n");
+        }
+
+        // NEW: try an Immediate Command to get codec 0 vendor ID
+        uint32_t vendor = 0;
+        if (hda_get_codec0_vendor_immediate(&vendor)) {
+            print(fb0(), "HDA: codec0 vendor ID = 0x");
+            // vendor ID is 16 bits in the high part of the response, but printing full 32 bits is fine for now
+            hx4(fb0(), (uint16_t)(vendor >> 16));
+            print(fb0(), vendor & 0xFFFF ? " (low=0x" : " (low=0x");
+            hx4(fb0(), (uint16_t)(vendor & 0xFFFF));
+            print(fb0(), ")\n");
+
+                // After printing codec0 vendor, ask for its root node children
+        uint8_t start_nid = 0;
+        uint8_t node_count = 0;
+        if (hda_codec0_get_sub_nodes(0, &start_nid, &node_count)) {
+            print(fb0(), "HDA: codec0 root has ");
+            print_u32(fb0(), node_count);
+            print(fb0(), " nodes starting at NID ");
+            print_u32(fb0(), start_nid);
+            print(fb0(), "\n");
+        } else {
+            print(fb0(), "HDA: failed to read codec0 root node range\n");
+        }
+
+        // Now ask the Audio Function Group (NID 1) what *its* children are.
+        uint8_t afg_first = 0;
+        uint8_t afg_count = 0;
+        if (hda_codec0_get_sub_nodes(1, &afg_first, &afg_count)) {
+            print(fb0(), "HDA: AFG NID 1 has ");
+            print_u32(fb0(), afg_count);
+            print(fb0(), " widgets starting at NID ");
+            print_u32(fb0(), afg_first);
+            print(fb0(), "\n");
+        } else {
+            print(fb0(), "HDA: failed to read AFG (NID 1) widget range\n");
+        }
+
+        } else {
+            print(fb0(), "HDA: failed to read codec0 vendor ID (immediate)\n");
+        }
+
+                // after printing reset status, before or after vendor read:
+        if (hda_has_codec()) {
+            print(fb0(), "HDA: codec mask = 0x");
+            hx4(fb0(), hda_get_codec_mask());
+            print(fb0(), ", primary codec = ");
+            print_u32(fb0(), hda_get_primary_codec_id());
+            print(fb0(), "\n");
+        } else {
+            print(fb0(), "HDA: no codecs reported in STATESTS\n");
+        }
+
+        if (hda_corb_rirb_ready()) {
+            print(fb0(), "HDA: CORB/RIRB init OK\n");
+        } else {
+            print(fb0(), "HDA: CORB/RIRB init FAILED\n");
+        }
+
+
+    } else {
+        kputs("HDA: no HDA controller found\n");
+    }
 
     // === Block device and disk driver initialization ===
     blockdev_init();
