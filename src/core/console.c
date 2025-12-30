@@ -5,6 +5,7 @@
 #include "core/console.h"
 #include "font8x16_tandy2k.h"
 #include "libc/string.h"
+#include "memory/hhdm.h"
 
 // ================= Framebuffer helpers =================
 struct limine_framebuffer *console_primary_framebuffer(void) {
@@ -113,6 +114,10 @@ static inline void fill_row_span(uint8_t *row_base, uint32_t pixels, uint32_t co
     for (uint32_t x = 0; x < pixels; x++) p[x] = color;
 }
 
+static inline uint8_t *framebuffer_base(const struct limine_framebuffer *fb) {
+    return (uint8_t *)hhdm_phys_to_virt((uint64_t)fb->address);
+}
+
 // Basic ANSI color palette (0-7 normal, 8-15 bright)
 static const uint32_t ansi_palette[16] = {
     0x00000000, // 0 black
@@ -201,7 +206,7 @@ static uint32_t view_start_line(void) {
 static void clear_outputs(void) {
     for (uint32_t i = 0; i < g_fb_count; i++) {
         struct limine_framebuffer *out = g_fbs[i];
-        uint8_t *base = (uint8_t *)(uintptr_t)out->address;
+        uint8_t *base = framebuffer_base(out);
         size_t pitch = (size_t)out->pitch;
         for (uint32_t y = 0; y < out->height; y++) {
             uint8_t *row = base + (size_t)y * pitch;
@@ -218,7 +223,7 @@ static void draw_char_scaled(uint32_t x, uint32_t y, char c, uint32_t fg, uint32
         struct limine_framebuffer *out = g_fbs[i];
         if (x + CELL_W() > out->width || y + CELL_H() > out->height) continue;
 
-        uint8_t  *base   = (uint8_t *)(uintptr_t)out->address;
+        uint8_t  *base   = framebuffer_base(out);
         size_t    pitch  = (size_t)out->pitch;
 
         // Fill glyph background box
@@ -281,7 +286,7 @@ static void scroll_view_up_one(void) {
 
     for (uint32_t i = 0; i < g_fb_count; i++) {
         struct limine_framebuffer *out = g_fbs[i];
-        uint8_t *base   = (uint8_t *)(uintptr_t)out->address;
+        uint8_t *base   = framebuffer_base(out);
         size_t   pitch  = (size_t)out->pitch;
 
         for (uint32_t y = 0; y + step < g_text_h_px; y++) {
