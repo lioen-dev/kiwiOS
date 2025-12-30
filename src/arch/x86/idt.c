@@ -285,28 +285,23 @@ static void idt_set_gate(uint8_t num, uint64_t handler, uint8_t type_attr) {
 static void idt_install(void) {
     memset(idt, 0, sizeof(idt));
 
-    static const void *exception_vectors[32] = {
-        isr_0,  isr_1,  isr_2,  isr_3,  isr_4,  isr_5,  isr_6,  isr_7,
-        isr_8,  isr_9,  isr_10, isr_11, isr_12, isr_13, isr_14, isr_15,
-        isr_16, isr_17, isr_18, isr_19, isr_20, isr_21, isr_22, isr_23,
-        isr_24, isr_25, isr_26, isr_27, isr_28, isr_29, isr_30, isr_31
-    };
+#define INSTALL_ISR(num, attr) idt_set_gate((uint8_t)(num), (uint64_t)isr_##num, (attr))
 
-    static const void *irq_vectors[16] = {
-        isr_32, isr_33, isr_34, isr_35,
-        isr_36, isr_37, isr_38, isr_39,
-        isr_40, isr_41, isr_42, isr_43,
-        isr_44, isr_45, isr_46, isr_47
-    };
+    INSTALL_ISR(0, 0x8E);   INSTALL_ISR(1, 0x8E);   INSTALL_ISR(2, 0x8E);   INSTALL_ISR(3, 0x8E);
+    INSTALL_ISR(4, 0x8E);   INSTALL_ISR(5, 0x8E);   INSTALL_ISR(6, 0x8E);   INSTALL_ISR(7, 0x8E);
+    INSTALL_ISR(8, 0x8E);   INSTALL_ISR(9, 0x8E);   INSTALL_ISR(10, 0x8E);  INSTALL_ISR(11, 0x8E);
+    INSTALL_ISR(12, 0x8E);  INSTALL_ISR(13, 0x8E);  INSTALL_ISR(14, 0x8E);  INSTALL_ISR(15, 0x8E);
+    INSTALL_ISR(16, 0x8E);  INSTALL_ISR(17, 0x8E);  INSTALL_ISR(18, 0x8E);  INSTALL_ISR(19, 0x8E);
+    INSTALL_ISR(20, 0x8E);  INSTALL_ISR(21, 0x8E);  INSTALL_ISR(22, 0x8E);  INSTALL_ISR(23, 0x8E);
+    INSTALL_ISR(24, 0x8E);  INSTALL_ISR(25, 0x8E);  INSTALL_ISR(26, 0x8E);  INSTALL_ISR(27, 0x8E);
+    INSTALL_ISR(28, 0x8E);  INSTALL_ISR(29, 0x8E);  INSTALL_ISR(30, 0x8E);  INSTALL_ISR(31, 0x8E);
 
-    for (size_t i = 0; i < 32; i++) {
-        idt_set_gate((uint8_t)i, (uint64_t)exception_vectors[i], 0x8E);
-    }
-    for (size_t i = 0; i < 16; i++) {
-        idt_set_gate((uint8_t)(32 + i), (uint64_t)irq_vectors[i], 0x8E);
-    }
+    INSTALL_ISR(32, 0x8E);  INSTALL_ISR(33, 0x8E);  INSTALL_ISR(34, 0x8E);  INSTALL_ISR(35, 0x8E);
+    INSTALL_ISR(36, 0x8E);  INSTALL_ISR(37, 0x8E);  INSTALL_ISR(38, 0x8E);  INSTALL_ISR(39, 0x8E);
+    INSTALL_ISR(40, 0x8E);  INSTALL_ISR(41, 0x8E);  INSTALL_ISR(42, 0x8E);  INSTALL_ISR(43, 0x8E);
+    INSTALL_ISR(44, 0x8E);  INSTALL_ISR(45, 0x8E);  INSTALL_ISR(46, 0x8E);  INSTALL_ISR(47, 0x8E);
 
-    idt_set_gate(128, (uint64_t)isr_128, 0xEE);
+    INSTALL_ISR(128, 0xEE);
 
     idtr.limit = sizeof(idt) - 1;
     idtr.base = (uint64_t)&idt;
