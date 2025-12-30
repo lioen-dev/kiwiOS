@@ -142,6 +142,21 @@ bool vmm_map_page(page_table_t* pt, uint64_t virt, uint64_t phys, uint64_t flags
     return true;
 }
 
+bool vmm_map_range(page_table_t* pt, uint64_t virt, uint64_t phys, size_t pages, uint64_t flags) {
+    for (size_t i = 0; i < pages; i++) {
+        uint64_t vaddr = virt + (i * PAGE_SIZE);
+        uint64_t paddr = phys + (i * PAGE_SIZE);
+        if (!vmm_map_page(pt, vaddr, paddr, flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool vmm_identity_map_range(page_table_t* pt, uint64_t phys, size_t pages, uint64_t flags) {
+    return vmm_map_range(pt, phys, phys, pages, flags);
+}
+
 void vmm_unmap_page(page_table_t* pt, uint64_t virt) {
     if (!pt) return;
     

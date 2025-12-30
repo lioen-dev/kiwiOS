@@ -11,29 +11,11 @@
 #include "core/log.h"
 #include "core/shell.h"
 #include "libc/string.h"
+#include "core/scheduler.h"
 #include "memory/heap.h"
 #include "memory/hhdm.h"
 #include "memory/pmm.h"
 #include "memory/vmm.h"
-
-static void init_pic(void) {
-    // Initialize PIC (Programmable Interrupt Controller)
-    outb(0x20, 0x11);
-    outb(0xA0, 0x11);
-    outb(0x21, 0x20);
-    outb(0xA1, 0x28);
-    outb(0x21, 0x04);
-    outb(0xA1, 0x02);
-    outb(0x21, 0x01);
-    outb(0xA1, 0x01);
-
-    // Mask all interrupts initially
-    outb(0x21, 0xFF);
-    outb(0xA1, 0xFF);
-
-    // Unmask only IRQ0 (timer)
-    outb(0x21, 0xFE);
-}
 
 // Enable x86_64 FPU/SSE for both kernel and userspace.
 static void x86_enable_sse(void) {
@@ -73,12 +55,11 @@ void kmain(void) {
     // Disable interrupts during initialization
     asm volatile ("cli");
 
-    init_idt();
-    log_ok("interrupts", "IDT installed");
-
     tss_init();
     gdt_init();
     log_ok("cpu", "GDT/TSS configured");
+
+    interrupts_init();
 
     x86_enable_sse();
     log_ok("cpu", "SSE enabled");
@@ -92,15 +73,15 @@ void kmain(void) {
         boot_hcf();
     }
 
-    vmm_init();
     heap_init();
+    vmm_init();
     log_ok("memory", "Virtual memory and heap initialized");
 
-    init_pic();
-    log_info("interrupts", "PIC initialized and timer unmasked");
+    scheduler_init();
+    log_ok("sched", "Scheduler bootstrap completed");
 
     // Enable interrupts
-    asm volatile ("sti");
+    interrupts_enable();
     log_info("kernel", "Interrupts enabled");
 
     shell_loop(console_primary_framebuffer());

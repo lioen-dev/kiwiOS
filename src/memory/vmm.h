@@ -39,6 +39,12 @@ bool vmm_map_page(page_table_t* pt, uint64_t virt, uint64_t phys, uint64_t flags
 // Unmap a virtual address
 void vmm_unmap_page(page_table_t* pt, uint64_t virt);
 
+// Map a contiguous range of pages
+bool vmm_map_range(page_table_t* pt, uint64_t virt, uint64_t phys, size_t pages, uint64_t flags);
+
+// Identity map a contiguous physical range
+bool vmm_identity_map_range(page_table_t* pt, uint64_t phys, size_t pages, uint64_t flags);
+
 // Get the physical address for a virtual address
 uint64_t vmm_get_physical(page_table_t* pt, uint64_t virt);
 
