@@ -246,6 +246,22 @@ static bool port_issue_and_wait(volatile uint8_t* base, uint32_t port, uint32_t 
 
     wr32(base, px + PxCI, slot_mask);
 
+    // Make sure the controller actually latched the command bit.
+    bool issued = false;
+    for (int i = 0; i < 1000; i++) {
+        if (rd32(base, px + PxCI) & slot_mask) {
+            issued = true;
+            break;
+        }
+        asm volatile("pause");
+    }
+    if (!issued) {
+        uint32_t cmd = rd32(base, px + PxCMD);
+        log_errorf("ahci", "PxCI did not latch command (CMD=%x CI=%x mask=%x)",
+                   cmd, rd32(base, px + PxCI), slot_mask);
+        return false;
+    }
+
     for (int i = 0; i < 400000; i++) {
         if ((rd32(base, px + PxCI) & slot_mask) == 0) break;
         asm volatile("pause");
@@ -519,6 +535,12 @@ static bool ahci_rw(uint8_t ata_cmd, uint64_t lba, uint32_t sector_count, void* 
     uint32_t port = g_disk.port;
     uint32_t px = AHCI_PORT_BASE + port * AHCI_PORT_STRIDE;
 
+    // If the port command engine was stopped (e.g., after a reset), restart it.
+    uint32_t cmd = rd32(base, px + PxCMD);
+    if ((cmd & (PxCMD_ST | PxCMD_FRE)) != (PxCMD_ST | PxCMD_FRE)) {
+        port_start(base, port);
+    }
+
     if (!port_wait_not_busy(base, port)) {
         log_error("ahci", "rw: port stayed busy");
         return false;
@@ -607,6 +629,12 @@ static bool ahci_nodata(uint8_t ata_cmd) {
     uint32_t port = g_disk.port;
     uint32_t px = AHCI_PORT_BASE + port * AHCI_PORT_STRIDE;
 
+    // Ensure the port is running before issuing cache flush or other commands.
+    uint32_t cmd_reg = rd32(base, px + PxCMD);
+    if ((cmd_reg & (PxCMD_ST | PxCMD_FRE)) != (PxCMD_ST | PxCMD_FRE)) {
+        port_start(base, port);
+    }
+
     if (!port_wait_not_busy(base, port)) {
         log_error("ahci", "nodata: port stayed busy");
         return false;
@@ -660,6 +688,12 @@ void ahci_probe_mmio(uint32_t mmio_phys32) {
     uint32_t pi  = rd32(base, AHCI_HBA_PI);
     uint32_t vs  = rd32(base, AHCI_HBA_VS);
 
+    if ((ghc & (1u << 31)) == 0) {
+        wr32(base, AHCI_HBA_GHC, ghc | (1u << 31));
+        ghc = rd32(base, AHCI_HBA_GHC);
+        log_infof("ahci", "Enabled AHCI mode (GHC now %x)", ghc);
+    }
+
     log_infof("ahci", "HBA mmio=%x CAP=%x GHC=%x PI=%x VS=%x",
               mmio_phys32, cap, ghc, pi, vs);
 
@@ -693,4 +727,3 @@ void ahci_probe_mmio(uint32_t mmio_phys32) {
         }
     }
 }
-
