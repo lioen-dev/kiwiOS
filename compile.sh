@@ -1,8 +1,6 @@
 #!/bin/bash
 rm -rf bin iso_root obj kiwi.img kiwiOS.iso
-bash rmindentifier.sh
-
-
+bash rmidentifier.sh
 
 make
 # Download the latest Limine binary release for the 10.x branch, only if it doesn't exist.

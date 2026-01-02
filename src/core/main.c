@@ -11,11 +11,33 @@
 #include "core/log.h"
 #include "core/shell.h"
 #include "libc/string.h"
-#include "core/scheduler.h"
 #include "memory/heap.h"
 #include "memory/hhdm.h"
 #include "memory/pmm.h"
 #include "memory/vmm.h"
+#include "drivers/pci/pci.h"
+#include "drivers/serial/serial.h"
+#include "drivers/block/block.h"
+#include "fs/bcache.h"
+
+static void init_pic(void) {
+    // Initialize PIC (Programmable Interrupt Controller)
+    outb(0x20, 0x11);
+    outb(0xA0, 0x11);
+    outb(0x21, 0x20);
+    outb(0xA1, 0x28);
+    outb(0x21, 0x04);
+    outb(0xA1, 0x02);
+    outb(0x21, 0x01);
+    outb(0xA1, 0x01);
+
+    // Mask all interrupts initially
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
+
+    // Unmask only IRQ0 (timer)
+    outb(0x21, 0xFE);
+}
 
 // Enable x86_64 FPU/SSE for both kernel and userspace.
 static void x86_enable_sse(void) {
@@ -47,19 +69,31 @@ void kmain(void) {
     if (!hhdm || hhdm->offset == 0) {
         boot_hcf();
     }
-    hhdm_set_offset(hhdm->offset);
+    hhdm_set_offset(hhdm->offset);    
 
     console_init();
+    console_clear();
     log_ok("console", "Framebuffer console initialized");
+
+    bool serial_ok = serial_init();
+    if (serial_ok) {
+        log_ok("serial", "COM1 initialized");
+    } else {
+        log_error("serial", "COM1 init failed (still may print on some setups)");
+    }
+
+    log_enable_serial(serial_ok);
+    idt_enable_serial(serial_ok);
 
     // Disable interrupts during initialization
     asm volatile ("cli");
 
+    init_idt();
+    log_ok("interrupts", "IDT installed");
+
     tss_init();
     gdt_init();
     log_ok("cpu", "GDT/TSS configured");
-
-    interrupts_init();
 
     x86_enable_sse();
     log_ok("cpu", "SSE enabled");
@@ -73,16 +107,24 @@ void kmain(void) {
         boot_hcf();
     }
 
-    heap_init();
     vmm_init();
+    heap_init();
     log_ok("memory", "Virtual memory and heap initialized");
 
-    scheduler_init();
-    log_ok("sched", "Scheduler bootstrap completed");
+    init_pic();
+    log_info("interrupts", "PIC initialized and timer unmasked");
 
     // Enable interrupts
-    interrupts_enable();
+    asm volatile ("sti");
     log_info("kernel", "Interrupts enabled");
+
+    pci_enumerate_and_log();
+    log_ok("pci", "PCI enumeration complete");
+
+    block_init();
+    log_ok("block", "Block devices initialized");
+    bcache_init(256);
+    log_ok("bcache", "Block cache initialized");
 
     shell_loop(console_primary_framebuffer());
     
